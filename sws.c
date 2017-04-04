@@ -11,110 +11,206 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
+#include <semaphore.h>
+#include <pthread.h>
+#include <sys/stat.h>
 #include "network.h"
+#include "rcb.h"
+#include "rcb_queue.h"
+#include "scheduler.h"
+#define MAX_HTTP_SIZE 8192                 
+#define MAX_REQUESTS 100
 
-#define MAX_HTTP_SIZE 8192                 /* size of buffer to allocate */
+pthread_mutex_t print_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t counter_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t work_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int counter=1;
+static queue work_queue;
+static int num_requests=0;
+static sem_t work_queue_entries;
 
 
-/* This function takes a file handle to a client, reads in the request, 
- *    parses the request, and sends back the requested file.  If the
- *    request is improper or the file is not available, the appropriate
- *    error is sent back.
- * Parameters: 
- *             fd : the file descriptor to the client connection
- * Returns: None
- */
-static void serve_client( int fd ) {
-  static char *buffer;                              /* request buffer */
-  char *req = NULL;                                 /* ptr to req file */
-  char *brk;                                        /* state used by strtok */
-  char *tmp;                                        /* error checking ptr */
-  FILE *fin;                                        /* input file handle */
-  int len;                                          /* length of data read */
 
-  if( !buffer ) {                                   /* 1st time, alloc buffer */
-    buffer = malloc( MAX_HTTP_SIZE );
-    if( !buffer ) {                                 /* error check */
-      perror( "Error while allocating memory" );
-      abort();
-    }
-  }
+int rcb_init(rcb_t *rcb){
+  int length = 0;                                      
+  struct stat st;                                   
+  char *req = NULL;                                 
+  char *brk;                                        
+  char *tmp;                                        
+  FILE *fin = NULL;                                        
 
-  memset( buffer, 0, MAX_HTTP_SIZE );
-  if( read( fd, buffer, MAX_HTTP_SIZE ) <= 0 ) {    /* read req from client */
+  memset(rcb->buffer, 0, MAX_HTTP_SIZE);
+  if( read( rcb->client, rcb->buffer, MAX_HTTP_SIZE) <= 0 ) {    
     perror( "Error while reading request" );
-    abort();
+    return 0;
   } 
-
-  /* standard requests are of the form
-   *   GET /foo/bar/qux.html HTTP/1.1
-   * We want the second token (the file path).
-   */
-  tmp = strtok_r( buffer, " ", &brk );              /* parse request */
+  tmp = strtok_r( rcb->buffer, " ", &brk );             
   if( tmp && !strcmp( "GET", tmp ) ) {
     req = strtok_r( NULL, " ", &brk );
   }
  
-  if( !req ) {                                      /* is req valid? */
-    len = sprintf( buffer, "HTTP/1.1 400 Bad request\n\n" );
-    write( fd, buffer, len );                       /* if not, send err */
-  } else {                                          /* if so, open file */
-    req++;                                          /* skip leading / */
-    fin = fopen( req, "r" );                        /* open file */
-    if( !fin ) {                                    /* check if successful */
-      len = sprintf( buffer, "HTTP/1.1 404 File not found\n\n" );  
-      write( fd, buffer, len );                     /* if not, send err */
-    } else {                                        /* if so, send file */
-      len = sprintf( buffer, "HTTP/1.1 200 OK\n\n" );/* send success code */
-      write( fd, buffer, len );
-
-      do {                                          /* loop, read & send file */
-        len = fread( buffer, 1, MAX_HTTP_SIZE, fin );  /* read file chunk */
-        if( len < 0 ) {                             /* check for errors */
-            perror( "Error while writing to client" );
-        } else if( len > 0 ) {                      /* if none, send chunk */
-          len = write( fd, buffer, len );
-          if( len < 1 ) {                           /* check for errors */
-            perror( "Error while writing to client" );
-          }
-        }
-      } while( len == MAX_HTTP_SIZE );              /* the last chunk < 8192 */
-      fclose( fin );
+  if( !req ) {                                      
+    length = sprintf( rcb->buffer, "HTTP/1.1 400 Bad request\n\n" );
+    write( rcb->client, rcb->buffer, length );                       
+  } else {                                          
+    req++;           
+    strncpy(rcb->filepath, req, FILENAME_MAX);                               
+    fin = fopen( req, "r" );                        
+    if(!fin) {                                   
+      length = sprintf( rcb->buffer, "HTTP/1.1 404 File not found\n\n" );  
+      write( rcb->client, rcb->buffer, length );                     
+    } else if( !fstat( fileno( fin ), &st ) ) {      //!stat( req, &st ) 
+      length = sprintf( rcb->buffer, "HTTP/1.1 200 OK\n\n" );
+      write( rcb->client, rcb->buffer, length );
+      rcb->file = fin;
+      rcb->remaining = st.st_size;
+      
+      pthread_mutex_lock(&counter_mutex); 
+      rcb->sequence = counter;
+      counter++;
+      pthread_mutex_unlock(&counter_mutex); 
+     
+      return 1; //rcb has been initialized
+    } else {
+      fclose(fin); //close file 
     }
-  }
-  close( fd );                                     /* close client connectuin*/
+  } 
+
+  return 0; //rcb not initialized
+}
+
+int rcb_process(rcb_t * rcb){
+  int chunk, length, sent;
+  if (rcb->remaining==0) return 1;  //done returns true.
+  else if (rcb->quantum!=0 && rcb->remaining > rcb->quantum)
+    chunk=rcb->quantum;
+  else chunk=rcb->remaining;
+  sent=chunk;
+  do {         
+    if (chunk>MAX_HTTP_SIZE)
+      length=fread( rcb->buffer, 1, MAX_HTTP_SIZE, rcb->file );  
+    else 
+      length=fread( rcb->buffer, 1, chunk, rcb->file );  
+    if( length < 1 ) {                             
+        perror( "Error reading" );
+        return 1;
+    } else if( length > 0 ) {                      
+      length = write( rcb->client, rcb->buffer, length );
+      if( length < 1 ) {                           
+        perror( "Error writing" );
+        return 1; //done
+      }
+      chunk=chunk-length;
+      rcb->remaining = rcb->remaining-length; 
+    }
+  } while( length == MAX_HTTP_SIZE && chunk > 0 );    
+  pthread_mutex_lock(&print_mutex); 
+  printf("Sent %d bytes of file %s.\n", sent, rcb->filepath);
+  fflush(stdout);
+  pthread_mutex_unlock(&print_mutex);        
+  return rcb->remaining <= 0; //not done returns false
 }
 
 
-/* This function is where the program starts running.
- *    The function first parses its command line parameters to determine port #
- *    Then, it initializes, the network and enters the main loop.
- *    The main loop waits for a client (1 or more to connect, and then processes
- *    all clients by calling the seve_client() function for each one.
- * Parameters: 
- *             argc : number of command line parameters (including program name
- *             argv : array of pointers to command line parameters
- * Returns: an integer status code, 0 for success, something else for error.
- */
-int main( int argc, char **argv ) {
-  int port = -1;                                    /* server port # */
-  int fd;                                           /* client file descriptor */
+void * thread_init(void *myid){
+ //   int id = (intptr_t) myid;
+    rcb_t * rcb=NULL;
+    while (1){
+      sem_wait(&work_queue_entries);
+      pthread_mutex_lock(&work_queue_mutex);
+      rcb = dequeue(&work_queue);
+      pthread_mutex_unlock(&work_queue_mutex);
+      if (rcb){
+        if (rcb_init(rcb)) {  
+          scheduler_add(rcb);   //add to scheduler
+          pthread_mutex_lock(&print_mutex); 
+          printf("Request for file %s admitted.\n", rcb->filepath);
+          fflush(stdout);
+          pthread_mutex_unlock(&print_mutex); 
+        }
+        else{
+          printf("FREEING: RCB couldn't be initialized");
+          num_requests--;
+          close(rcb->client); //close client connection
+          free(rcb); //free memory
+          rcb=NULL;
+        }
+      }
+      rcb = scheduler_get(); //get next in schedule
+      while (rcb){  //while there are entries in scheduler
+        int done=rcb_process(rcb); 
+        if (!done){ 
+          scheduler_add(rcb);  //add back into scheduler
+        }
+        else{
+            printf("FREEING: done with RCB");
+            pthread_mutex_lock(&print_mutex); 
+            printf("Request for file %s (#%d) completed.\n", rcb->filepath, rcb->sequence);
+            fflush(stdout);
+            pthread_mutex_unlock(&print_mutex); 
+            fclose( rcb->file ); //close file associated with stream
+            close( rcb->client ); //close file associated with descriptor
+            num_requests--; //reduce number of active requests
+            free(rcb);  //free memory
+            rcb=NULL;
+        }
+        rcb = scheduler_get(); //get next from scheduler
+      }
+    }
+}
 
-  /* check for and process parameters 
-   */
-  if( ( argc < 2 ) || ( sscanf( argv[1], "%d", &port ) < 1 ) ) {
-    printf( "usage: sms <port>\n" );
+
+
+
+int main( int argc, char **argv ) {
+  int port = -1;  
+  int num_threads=-1;                                  
+  char scheduler[4];
+  int fd;
+                              
+  if (( argc != 4 ) || ( sscanf( argv[1], "%d", &port ) < 1 ) 
+                   || (sscanf(argv[2], "%s", scheduler) < 1 )
+                   || (sscanf(argv[3], "%d", &num_threads) < 1 )){
+    printf( "usage: sms <port> <scheduler> <num_threads>\n" );
     return 0;
   }
+ 
+  network_init(port);         //initialize network module 
+  scheduler_init(scheduler);  //initialize scheduler.
+  sem_init(&work_queue_entries, 0, 0);  //initialize semaphore
 
-  network_init( port );                             /* init network module */
-
-  for( ;; ) {                                       /* main loop */
-    network_wait();                                 /* wait for clients */
-
-    for( fd = network_open(); fd >= 0; fd = network_open() ) { /* get clients */
-      serve_client( fd );                           /* process each client */
+  pthread_t tid[num_threads];
+  int id[num_threads];
+  int i;
+  for (i = 0; i < num_threads; i++) {
+    id[i] = i;
+    if (pthread_create(&tid[i], NULL, thread_init, (void*)(intptr_t)(id+i))) {
+      fprintf(stderr, "Error creating thread\n");
+      return -2;
     }
   }
+
+  while (1) { 
+    network_wait();
+    for(fd = network_open(); fd >= 0; fd = network_open()) { //get clients
+      while (num_requests>=MAX_REQUESTS){}
+      printf("MAKING RCB");
+      rcb_t * rcb = malloc(sizeof *rcb);
+      rcb -> client = fd;
+      rcb -> quantum = 0;
+      enqueue(&work_queue, rcb);
+      sem_post(&work_queue_entries);
+      num_requests++;
+    }
+  }
+
+  for (i = 0; i < num_threads; i++) {
+    if (pthread_join(tid[i], NULL)) { //join thread
+      fprintf(stderr, "Error joining thread\n");
+      return -3;
+    }
+  }
+  return 0;
 }
+
+
