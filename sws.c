@@ -27,7 +27,7 @@ pthread_mutex_t work_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int counter=1;
 static queue work_queue;
 static int num_requests=0;
-static sem_t work_queue_entries;
+static pthread_cond_t new_request;
 
 
 
@@ -114,10 +114,12 @@ int rcb_process(rcb_t * rcb){
 
 void * thread_init(void *myid){
  //   int id = (intptr_t) myid;
-    rcb_t * rcb=NULL;
+    rcb_t * rcb;
     while (1){
-      sem_wait(&work_queue_entries);
+      rcb = NULL;
       pthread_mutex_lock(&work_queue_mutex);
+      while (num_requests==0)
+        pthread_cond_wait(&new_request, &work_queue_mutex);
       rcb = dequeue(&work_queue);
       pthread_mutex_unlock(&work_queue_mutex);
       if (rcb){
@@ -137,7 +139,7 @@ void * thread_init(void *myid){
         }
       }
       rcb = scheduler_get(); //get next in schedule
-      while (rcb){  //while there are entries in scheduler
+      if (rcb){
         int done=rcb_process(rcb); 
         if (!done){ 
           scheduler_add(rcb);  //add back into scheduler
@@ -154,7 +156,6 @@ void * thread_init(void *myid){
             free(rcb);  //free memory
             rcb=NULL;
         }
-        rcb = scheduler_get(); //get next from scheduler
       }
     }
 }
@@ -177,7 +178,7 @@ int main( int argc, char **argv ) {
  
   network_init(port);         //initialize network module 
   scheduler_init(scheduler);  //initialize scheduler.
-  sem_init(&work_queue_entries, 0, 0);  //initialize semaphore
+  pthread_cond_init(&new_request, NULL); //initialize condition variable
 
   pthread_t tid[num_threads];
   int id[num_threads];
@@ -194,13 +195,14 @@ int main( int argc, char **argv ) {
     network_wait();
     for(fd = network_open(); fd >= 0; fd = network_open()) { //get clients
       while (num_requests>=MAX_REQUESTS){}
-      printf("MAKING RCB");
       rcb_t * rcb = malloc(sizeof *rcb);
       rcb -> client = fd;
       rcb -> quantum = 0;
+      pthread_mutex_lock(&work_queue_mutex);
       enqueue(&work_queue, rcb);
-      sem_post(&work_queue_entries);
       num_requests++;
+      pthread_cond_broadcast(&new_request);  //wake up any sleeping threads
+      pthread_mutex_unlock(&work_queue_mutex);
     }
   }
 

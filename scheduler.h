@@ -4,8 +4,8 @@
 
 #include "rcb.h"
 
-extern void scheduler_init( char * name );
-extern void scheduler_add( rcb_t * rcb );
-extern rcb_t * scheduler_get();
+void scheduler_init( char * name );
+void scheduler_add( rcb_t * rcb );
+rcb_t * scheduler_get();
 
 #endif

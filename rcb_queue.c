@@ -1,7 +1,6 @@
 #include "rcb_queue.h"
 #include "rcb.h"
 #include <stdlib.h>
-#include <pthread.h>
 
 
 //enqueues rcb
@@ -23,7 +22,7 @@ void sjf_enqueue(queue *q, rcb_t *rcb) {
 	temp->val = rcb; //set value of node
 	temp->next = NULL; //set next node
 	if (queue_empty(q)){ 
-		printf("en: QUEUE EMPTY");
+		//printf("en: QUEUE EMPTY");
 		q->head = temp; //update head
 		q->tail = temp; //update tail
 	}
@@ -57,6 +56,6 @@ rcb_t * dequeue(queue *q) {
 		free(q->head);
 		q->head = temp;
 	}
-	else printf("deq: QUEUE EMPTY");
+	//else printf("deq: QUEUE EMPTY");
 	return rcb;
 }
