@@ -1,0 +1,6 @@
+Simple test
+Group 13
+Tests whether the server is processing files correctly.
+Uses 3 files. 1 small, 1 medium, 1 large. 
+It should output 1, 2, 3 because there are no delays and the sizes are 
+so different, arranged in ascending order.

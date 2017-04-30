@@ -1,0 +1,6 @@
+Large to small enqueue test
+Group 13
+Tests whether the mlfb and rr will correctly enqueue a small file while a large one is running.
+Uses 4 files. 2 small, 1 medium, 1 large.
+sjf should be in order, while mlfb and rr will finish a small one before the big file, because it will arrive 
+before the big file is finished processing. 

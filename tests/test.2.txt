@@ -1,0 +1,7 @@
+Simple varied linear test
+Group 13
+Tests whether each scheduler is doing its own job, and helps to show the difference.
+Uses 3 files. 2 small, 1 large. 
+It should output a different result for each of the schedulers,
+because the delays prevent sjf from scheduling them, lets mlfb finish the small ones before the big one, and 
+allows rr to do something in between.

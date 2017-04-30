@@ -1,0 +1,6 @@
+Expanded large to small enqueue test
+Group 13
+Tests rr and mlfb similarly to test 4 to ensure that they correctly enqueue, but with more complexity.
+Uses 4 files. 1 small, 1 medium, 2 large.
+mlfb and rr should be the same, both finishing the small and medium files first, despite them arriving second and fourth, 
+while sjf should ouput them in an order partly based on file size and partly on when they are received.

@@ -1,0 +1,6 @@
+Medium and large handling with delays test
+Group 13
+Tests the handling of medium to large files for each scheduler, and demonstrates how sjf can be tricked
+into a sub-par order with delays.
+Uses 3 files. 1 medium, 2 large. 
+mlfb and rr should have the same output because they will not be tricked by the delay, while sjf will run linearly.

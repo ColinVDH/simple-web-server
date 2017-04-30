@@ -1,0 +1,7 @@
+Large to small enqueue vs linear test
+Group 13
+Tests the difference in overhead between the algorithms and shows how sjf can run in the order it receives in if there 
+is too long a delay.
+Uses 3 files. 1 small, 2 large.
+mlfb and rr should output the same, because the two large files will never finish before the small file.
+sjf will finish them in order, because there aren't enough to cause a lot of queuing.

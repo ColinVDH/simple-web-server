@@ -1,0 +1,5 @@
+Error test
+Group 13
+Tests whether errors are returned correctly for files that aren't found.
+Uses 2 files. 1 small, 1 that doesn't exist.
+Should output the same result for all, because it tests to ensure that non-existant files are handled correctly.

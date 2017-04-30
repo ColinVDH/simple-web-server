@@ -1,0 +1,5 @@
+Miscellaneous test
+Group 13
+Tests a large variety of sizes and delays to ensure all schedulers can handle it.
+Uses 9 files. 4 small, 3 medium, 2 large.
+Should print similar, but not identical results for each scheduler.

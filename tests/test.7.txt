@@ -1,0 +1,9 @@
+Many large file with single small test
+Group 13
+Tests how a combination of many large files with a small number of small files interact.
+Uses 6 files. 1 small, 5 large.
+mlfb and rr have the same results, finishing the single small file (despite it being the fifth to arrive) 
+before any of the large ones. The largest file, the fourth to arrive, is the last to finish and otherwise they go in
+order of arrival because they're the same size.
+sjf gets the small one early enough to enqueue it before finishing many of the big files, but the difference in 
+file sizes other than that are not enough to prevent it from running them in order.
