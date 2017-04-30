@@ -3,12 +3,12 @@ Simple web server written in C for CSCI 3120. Original code by Alex Brodsky. Job
 
 
 ### Features
-- responds to GET requests from clients.
-- three scheduling algorithms are implemented: 
-..-Shortest job first: process jobs in queue by the size of the file requested.
-..-Round robin: send a fixed quantum of data from the file, and if the job is not finished, add it back to the end of the queue.
-..-Multi-level feedback queue: process jobs in multiple queues, each assigned a priority and a quantum. Jobs are always taken from the highest priority queue. If, after the quantum is processed, the job is not finished, it placed into the next lower priority queue. The lowest priority queue is round robin.
--multi-threading: multiple threads can work concurrently to process jobs.
+* responds to GET requests from clients.
+* three scheduling algorithms are implemented: 
+  1. **Shortest job first**: process jobs in queue by the size of the file requested.
+  2. **Round robin**: send a fixed quantum of data from the file, and if the job is not finished, add it back to the end of the queue.
+  3. **Multi-level feedback queue**: process jobs in multiple queues, each assigned a priority and a quantum. Jobs are always taken from the highest priority queue. If, after the quantum is processed, the job is not finished, it placed into the next lower priority queue. The lowest priority queue is round robin.
+* multi-threading: multiple threads can work concurrently to process jobs.
 
 
 ### Usage
