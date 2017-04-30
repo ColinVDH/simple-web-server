@@ -1,5 +1,5 @@
 # simple-web-server
-Simple web server written in C for CSCI 3120. Original code by Alex Brodsky. Job scheduling and multi-threading implemented by Ryan Murchison, Colin Reagh, and Colin Vandenhof.
+Simple web server written in C for CSCI 3120 Operating Systems, Winter 2017. Original code by Alex Brodsky. Job scheduling and multi-threading implemented by Ryan Murchison, Colin Reagh, and Colin Vandenhof.
 
 
 ### Features
